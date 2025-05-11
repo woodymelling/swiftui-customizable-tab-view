@@ -13,10 +13,12 @@ import SwiftUI
 class EditTabCustomizationsViewController<Selection: Hashable & Sendable>: UITableViewController {
     init(
         customization: TabCustomization<Selection>,
+        overflowLabel: @escaping () -> any View,
         onCustomizationChange: @escaping (TabCustomization<Selection>) -> Void
     ) {
         self.customization = customization
         self.onCustomizationChange = onCustomizationChange
+        self.overflowLabel = overflowLabel
 
         super.init(style: .insetGrouped)
     }
@@ -32,6 +34,8 @@ class EditTabCustomizationsViewController<Selection: Hashable & Sendable>: UITab
 
     /// A callback that notifies when the customization changes.
     var onCustomizationChange: ((TabCustomization<Selection>) -> Void)?
+
+    var overflowLabel: () -> any View
 
     class DataSource:
         UITableViewDiffableDataSource<TabSection, TabItem<Selection>>
@@ -140,12 +144,14 @@ class EditTabCustomizationsViewController<Selection: Hashable & Sendable>: UITab
         dataSource = DataSource(tableView: tableView) { (tableView, indexPath, item) -> UITableViewCell? in
             let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath)
             switch item {
-            case .tab(let selection):
-                cell.textLabel?.text = "Tab: \(selection)"
+            case .tab(let selection), .more(let selection):
+                cell.contentConfiguration = UIHostingConfiguration {
+                    Text("\(selection)")
+                }
             case .morePlaceholder:
-                cell.textLabel?.text = "More"
-            case .more(let selection):
-                cell.textLabel?.text = "More: \(selection)"
+                cell.contentConfiguration = UIHostingConfiguration {
+                    AnyView(self.overflowLabel())
+                }
             }
             cell.shouldIndentWhileEditing = false
             return cell
@@ -157,9 +163,13 @@ struct EditCustomizationsView<Selection: Sendable & Hashable>: UIViewControllerR
     @Binding var customization: TabCustomization<Selection>
 
     func makeUIViewController(context: Context) -> EditTabCustomizationsViewController<Selection> {
-        let vc = EditTabCustomizationsViewController<Selection>(customization: customization) { @MainActor in
+        let vc = EditTabCustomizationsViewController<Selection>(
+            customization: customization,
+            overflowLabel: context.environment.overflowLabel
+        ) { @MainActor in
             customization = $0
         }
+        
         // Initialize with the current binding value.
         vc.customization = customization
         // Set up the callback so that changes from the controller update the binding.

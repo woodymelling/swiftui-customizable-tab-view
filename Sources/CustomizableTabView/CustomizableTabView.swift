@@ -19,7 +19,12 @@ struct TabViewCustomization: View {
 
     var body: some View {
         CustomizableTabView(selection: $selectedTab, customization: $customization) {
+            ForEach(1..<9) { c in
 
+                NavigationStackTab("\(c)", systemImage: "\(c).lane", value: c) {
+                    Text("Feature \(c)")
+                }
+            }
         }
     }
 }
@@ -43,23 +48,21 @@ public struct CustomizableTabView<Selection: Hashable & Sendable, Content: View>
     var content: Content
 
     @State var moreDestination: Selection?
-    @State var uuid = UUID()
+    @State var isEditingCustomization: Bool = false
+
+    @Environment(\.overflowLabel) var overflowLabel
 
     public var body: some View {
         TabView(selection: $selection[moreDestination]) {
             Group(subviews: content) { subviews in
 
-
-                let subviews = customization.visibleItems.compactMap { item in
-                    print("\(item)")
+                let orderedSubviews = customization.visibleItems.compactMap { item in
                     return subviews.first {
-                        $0.containerValues.tag(for: Selection.self) == item
+                        $0.containerValues.featureTag == AnyHashable(item)
                     }
                 }
 
-                let _ = print("count:", subviews.count)
-
-                ForEach(subviews) { subview in
+                ForEach(orderedSubviews) { subview in
                     subview
                         .tabItem { AnyView(subview.containerValues.label()) }
                         .tag(
@@ -75,22 +78,24 @@ public struct CustomizableTabView<Selection: Hashable & Sendable, Content: View>
             MoreView(
                 destination: $moreDestination,
                 tabCustomization: $customization,
+                isEditing: $isEditingCustomization,
                 content: content
             )
             .tag(TabLocation<Selection>.TabBarLocation.more)
-            .tabItem { Label("More", systemImage: "ellipsis") }
+            .tabItem { AnyView(overflowLabel()) }
             .environment(\.tabLocation, .more)
 
-        }
-        .onChange(of: customization) { _, _ in
-            self.uuid = UUID()
         }
         .onChange(of: moreDestination) { old, new in
             self.selection = .more(new)
         }
-        .onChange(of: selection) { oldValue, newValue in
-            print("Selection:", newValue)
+        .onChange(of: customization) { oldValue, newValue in
+            print(newValue)
         }
+        // This is needed to enforce a full refresh of everything when the customization changes
+        // An issue would appear where immideately after swapping a tab from overflow to the tab bar, that tab would have the old tabs contents, but the new label.
+        .id(customization)
+
     }
 
 
@@ -98,10 +103,10 @@ public struct CustomizableTabView<Selection: Hashable & Sendable, Content: View>
 
         @Binding var destination: Selection?
         @Binding var tabCustomization: TabCustomization<Selection>
+        @Binding var isEditing: Bool
 
         var content: Content
 
-        @State var isEditing = false
 
         var body: some View {
             NavigationStack {
@@ -137,15 +142,14 @@ public struct CustomizableTabView<Selection: Hashable & Sendable, Content: View>
                 Group(subviews: content) { subviews in
                     List {
 
-                        let subviews = customization.overflowItems.compactMap { item in
-                            print("\(item)")
+                        let orderedSubviews = customization.overflowItems.compactMap { item in
                             return subviews.first {
                                 $0.containerValues.tag(for: Selection.self) == item
                             }
                         }
 
 
-                        ForEach(subviews) { subview in
+                        ForEach(orderedSubviews) { subview in
                             NavigationLinkButton {
                                 let tag = subview.containerValues.tag(for: Selection.self)
                                 self.destination = tag
@@ -169,14 +173,10 @@ public struct CustomizableTabView<Selection: Hashable & Sendable, Content: View>
 }
 
 
-extension CustomizableTabView {
-
-
-}
-
-
 extension ContainerValues {
+    @Entry var featureTag: AnyHashable = AnyHashable(UUID())
     @Entry var label: () -> any View = { EmptyView() }
+
 }
 
 enum SimplerTabLocation {
@@ -187,14 +187,15 @@ enum SimplerTabLocation {
 extension EnvironmentValues {
     @Entry var maxVisibleTabs: Int = 5
     @Entry var tabLocation: SimplerTabLocation? = nil
+    @Entry var overflowLabel: () -> any View = { Label("More", systemImage: "ellipsis") }
 }
 
-struct NavigationStackTab<
+public struct NavigationStackTab<
     TabValue: Hashable,
     Content: View,
     Label: View
 >: View where TabValue: Hashable {
-    init(
+    public init(
         _ titleKey: LocalizedStringKey,
         systemImage: String,
         value: TabValue,
@@ -211,7 +212,7 @@ struct NavigationStackTab<
 
     @Environment(\.tabLocation) var tabLocation
 
-    var body: some View {
+    public var body: some View {
         Group {
             switch tabLocation {
             case .tabBar, .none:
@@ -220,11 +221,11 @@ struct NavigationStackTab<
                 }
             case .more:
                 content()
-
             }
         }
         .tabItem(label)
         .tag(value)
+        .containerValue(\.featureTag, value)
         .containerValue(\.label, label)
     }
 }

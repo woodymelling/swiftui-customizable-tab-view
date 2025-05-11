@@ -10,7 +10,7 @@ import Collections
 
 /// A model that represents your tab customization with separate visible and overflow items.
 /// The public API exposes the “truncated” visible items (if total > maxVisible) and the overflow.
-public struct TabCustomization<Selection: Hashable & Sendable>: Sendable, Equatable {
+public struct TabCustomization<Selection: Hashable & Sendable>: Sendable, Equatable, Hashable {
     // MARK: - Stored Properties
     private var visible: OrderedSet<Selection>
     private var overflow: OrderedSet<Selection>
@@ -79,6 +79,9 @@ public struct TabCustomization<Selection: Hashable & Sendable>: Sendable, Equata
         self.overflow = OrderedSet(all.suffix(from: visibleCount))
     }
 }
+
+extension TabCustomization: Decodable where Selection: Decodable {}
+extension TabCustomization: Encodable where Selection: Encodable {}
 
 
 #if canImport(UIKit)
